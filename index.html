@@ -1,11 +1,55 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的个人网站</title>
 </head>
 <body>
-    <h1>你好，世界！</h1>
+    <p1>天气查询</p1>
+    <div class="weather-search">
+        <input type="text" id="cityCodeInput" placeholder="请输入城市编码">
+        <button id="weatherBtn">查询天气</button>
+    </div>
+    <div id="weatherResult"></div>
+
+    <script>
+        const cityCodeInput = document.getElementById('cityCodeInput');
+        const weatherBtn = document.getElementById('weatherBtn');
+        const resultDiv = document.getElementById('weatherResult');
+        const userKey = '1b854f97e5fcecb3e68bc00c6fbcc087';
+
+        weatherBtn.addEventListener('click', function(){
+            const userCityCodeInput = cityCodeInput.value.trim();
+            if (userCityCodeInput === "") {
+                alert("请输入内容后再查询！");
+                return;
+            }
+
+            resultDiv.innerText = `正在查询编码为 ${userCityCodeInput} 的城市天气...`;
+            
+            const url = `https://restapi.amap.com/v3/weather/weatherInfo?city=${userCityCodeInput}&key=${userKey}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if(data.status == 0 || data.infocode == 10001){
+                        resultDiv.innerText("请求结果错误：", data.info);
+                        return;
+                    }
+
+                    const weatherData = data.lives[0];
+                    resultDiv.innerHTML = `
+                        <h3>${weatherData.province} ${weatherData.city}</h3>
+                        <p>温度：${weatherData.temperature}℃</p>
+                        <p>天气：${weatherData.weather}</p>
+                    `;
+                })
+                .catch(error => {
+                    // 如果网络断了或者地址错了，会走这里
+                    resultDiv.innerText("请求失败了：", error);
+                });
+        });
+    </script>
 </body>
 </html>
