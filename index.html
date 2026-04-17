@@ -6,7 +6,7 @@
     <title>我的个人网站</title>
 </head>
 <body>
-    <p1>天气查询</p1>
+    <h1>天气查询（高德API）</h1>
     <div class="weather-search">
         <input type="text" id="cityCodeInput" placeholder="请输入城市编码">
         <button id="weatherBtn">查询天气</button>
@@ -40,7 +40,8 @@
 
                     const weatherData = data.lives[0];
                     resultDiv.innerHTML = `
-                        <h3>${weatherData.province} ${weatherData.city}</h3>
+                        <p2>${weatherData.province}</p2>
+                        <p>${weatherData.city}<p>
                         <p>温度：${weatherData.temperature}℃</p>
                         <p>天气：${weatherData.weather}</p>
                     `;
