@@ -1,56 +1,193 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的个人网站</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>我的个人网站</title>
+  <style>
+    body {
+      font-family: "Microsoft YaHei", sans-serif;
+      margin: 24px;
+      line-height: 1.6;
+    }
+    .weather-search {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    select, button {
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+    #weatherResult p {
+      margin: 4px 0;
+    }
+  </style>
 </head>
 <body>
-    <h1>天气查询（高德API）</h1>
-    <div class="weather-search">
-        <input type="text" id="cityCodeInput" placeholder="请输入城市编码">
-        <button id="weatherBtn">查询天气</button>
-    </div>
-    <div id="weatherResult"></div>
+  <h1>天气查询（后端代理）</h1>
 
-    <script>
-        const cityCodeInput = document.getElementById('cityCodeInput');
-        const weatherBtn = document.getElementById('weatherBtn');
-        const resultDiv = document.getElementById('weatherResult');
-        const userKey = '1b854f97e5fcecb3e68bc00c6fbcc087';
+  <div class="weather-search">
+    <select id="provinceSelect">
+      <option value="">请选择省份</option>
+    </select>
 
-        weatherBtn.addEventListener('click', function(){
-            const userCityCodeInput = cityCodeInput.value.trim();
-            if (userCityCodeInput === "") {
-                alert("请输入内容后再查询！");
-                return;
-            }
+    <select id="citySelect" disabled>
+      <option value="">请先选择省份</option>
+    </select>
 
-            resultDiv.innerText = `正在查询编码为 ${userCityCodeInput} 的城市天气...`;
-            
-            const url = `https://restapi.amap.com/v3/weather/weatherInfo?city=${userCityCodeInput}&key=${userKey}`;
+    <button id="weatherBtn">查询天气</button>
+  </div>
 
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if(data.status == 0 || data.infocode == 10001){
-                        resultDiv.innerText("请求结果错误：", data.info);
-                        return;
-                    }
+  <div id="weatherResult"></div>
 
-                    const weatherData = data.lives[0];
-                    resultDiv.innerHTML = `
-                        <p2>${weatherData.province}</p2>
-                        <p>${weatherData.city}<p>
-                        <p>温度：${weatherData.temperature}℃</p>
-                        <p>天气：${weatherData.weather}</p>
-                    `;
-                })
-                .catch(error => {
-                    // 如果网络断了或者地址错了，会走这里
-                    resultDiv.innerText("请求失败了：", error);
-                });
+  <script>
+    const provinceSelect = document.getElementById("provinceSelect");
+    const citySelect = document.getElementById("citySelect");
+    const weatherBtn = document.getElementById("weatherBtn");
+    const resultDiv = document.getElementById("weatherResult");
+
+    // 这里不再放高德 key，只请求你自己的后端
+    const API_BASE = "http://localhost:3000/api";
+    let querying = false;
+
+    function setCityPlaceholder(text) {
+      citySelect.innerHTML = `<option value="">${text}</option>`;
+    }
+
+    function createDistrictUrl(keywords) {
+      return `${API_BASE}/district?keywords=${encodeURIComponent(keywords)}`;
+    }
+
+    async function loadProvinces() {
+      resultDiv.innerText = "正在加载省份列表...";
+      try {
+        const response = await fetch(createDistrictUrl("中国"));
+        const data = await response.json();
+
+        if (data.status !== "1" || !data.districts || !data.districts.length) {
+          throw new Error(data.info || "省份列表加载失败");
+        }
+
+        const provinces = data.districts[0].districts || [];
+        provinceSelect.innerHTML = '<option value="">请选择省份</option>';
+
+        provinces.forEach((province) => {
+          provinceSelect.insertAdjacentHTML(
+            "beforeend",
+            `<option value="${province.name}">${province.name}</option>`
+          );
         });
-    </script>
+
+        resultDiv.innerText = "请选择省份和城市后查询天气。";
+      } catch (error) {
+        resultDiv.innerText = `省份列表加载失败：${error.message}`;
+      }
+    }
+
+    async function loadCities(provinceName) {
+      citySelect.disabled = true;
+      setCityPlaceholder("城市列表加载中...");
+
+      try {
+        const response = await fetch(createDistrictUrl(provinceName));
+        const data = await response.json();
+
+        if (data.status !== "1" || !data.districts || !data.districts.length) {
+          throw new Error(data.info || "城市列表加载失败");
+        }
+
+        const districts = data.districts[0].districts || [];
+        citySelect.innerHTML = '<option value="">请选择城市</option>';
+
+        if (!districts.length) {
+          citySelect.insertAdjacentHTML(
+            "beforeend",
+            `<option value="${data.districts[0].adcode}">${data.districts[0].name}</option>`
+          );
+        } else {
+          districts.forEach((city) => {
+            citySelect.insertAdjacentHTML(
+              "beforeend",
+              `<option value="${city.adcode}">${city.name}</option>`
+            );
+          });
+        }
+
+        citySelect.disabled = false;
+      } catch (error) {
+        setCityPlaceholder("城市列表加载失败");
+        resultDiv.innerText = `城市列表加载失败：${error.message}`;
+      }
+    }
+
+    provinceSelect.addEventListener("change", () => {
+      const provinceName = provinceSelect.value;
+      if (!provinceName) {
+        citySelect.disabled = true;
+        setCityPlaceholder("请先选择省份");
+        return;
+      }
+      loadCities(provinceName);
+    });
+
+    weatherBtn.addEventListener("click", async () => {
+      if (querying) return;
+
+      const selectedProvince = provinceSelect.value;
+      const selectedCityCode = citySelect.value;
+      const selectedCityName = citySelect.options[citySelect.selectedIndex]?.text || "";
+
+      if (!selectedProvince) {
+        alert("请先选择省份！");
+        return;
+      }
+
+      if (!selectedCityCode) {
+        alert("请选择城市后再查询！");
+        return;
+      }
+
+      querying = true;
+      weatherBtn.disabled = true;
+      resultDiv.innerText = `正在查询 ${selectedProvince} ${selectedCityName} 的天气...`;
+
+      try {
+        const url = `${API_BASE}/weather?city=${encodeURIComponent(selectedCityCode)}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "请求失败");
+        }
+
+        if (data.status !== "1" || !data.lives || !data.lives.length) {
+          throw new Error(data.info || "天气查询失败");
+        }
+
+        const weatherData = data.lives[0];
+        resultDiv.innerHTML = `
+          <p>${weatherData.province}</p>
+          <p>${weatherData.city}</p>
+          <p>温度：${weatherData.temperature}℃</p>
+          <p>天气：${weatherData.weather}</p>
+          <p>风向：${weatherData.winddirection}</p>
+          <p>风力：${weatherData.windpower}级</p>
+          <p>发布时间：${weatherData.reporttime}</p>
+        `;
+      } catch (error) {
+        resultDiv.innerText = `请求失败：${error.message}`;
+      } finally {
+        // 前端短暂冷却，提升体验（真正防刷在后端）
+        setTimeout(() => {
+          querying = false;
+          weatherBtn.disabled = false;
+        }, 1500);
+      }
+    });
+
+    loadProvinces();
+  </script>
 </body>
 </html>
